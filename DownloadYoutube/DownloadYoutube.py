@@ -1,25 +1,29 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# # 下載youtube影片 
+# 
+# ### 說明:
+# 於終端機輸入指令下載影片，並剪裁 0 ~ t 秒
+# 
+# ### 指令範例:
+# ```
+# $ python download_youtube.py -u https://youtu.be/CUfFgRcKzAg -o save.mp4 -s 10
+# ```
+# 
+# ### args:
+# 1. -u  : (url)    影片網址
+# 2. -o  : (output) 輸出名稱
+# 3. -s  : (sec)    輸出秒數
+# 
+# ### 參考資料
+# [1] CAVE Education. 2020. "Pytorch深度學習框架X NVIDIA JetsonNano應用-YOLOv5辨識台灣即時路況 (繁體)"
+#     [Online]. Available: https://www.rs-online.com/designspark/pytorchx-nvidia-jetsonnano-yolov5-cn
+#     [Accessed Feb. 15, 2022]
+# 
+
 # In[ ]:
 
-
-'''
-REFERENCE
-
-[1] CAVE Education. 2020. "Pytorch深度學習框架X NVIDIA JetsonNano應用-YOLOv5辨識台灣即時路況 (繁體)"
-    [Online]. Available: https://www.rs-online.com/designspark/pytorchx-nvidia-jetsonnano-yolov5-cn
-    [Accessed Feb. 15, 2022]
-
-'''
-
-
-# In[ ]:
-
-
-### 下載yotube影片 
-# 說明: 於終端機輸入指令下載影片，並剪裁 0 ~ t 秒
-# $ python capture_livestream.py -u https://youtu.be/CUfFgRcKzAg -o save.mp4 -s 10
 
 ### IMPORT LIBRARY
 import argparse

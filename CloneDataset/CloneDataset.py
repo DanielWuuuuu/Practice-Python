@@ -1,64 +1,80 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
-
-
-'''
-REFERENCE
-
-[1] A. Kathuria. "How to Train YOLO v5 on a Custom Dataset." 2021.
-    [Online]. Available: https://blog.paperspace.com/train-yolov5-custom-data/
-    [Accessed March 2, 2022]
-
-[2] mjahanifar, S. Gupta. "goodhamgupta/yolo_to_voc.py" 2021.
-    [Online]. Available: https://gist.github.com/goodhamgupta/7ca514458d24af980669b8b1c8bcdafd?permalink_comment_id=3247266#gistcomment-3247266
-    [Accessed March 2, 2022]
-
-'''
-
-
-# In[ ]:
-
-
-'''
-dataset           # clone_dir  
-├ 0               ## clone_images_folder  
-│ ├ img           ### clone_images_folder, clone_images_folder_dir  
-│ │ ├ 0000.jpg    #### clone_images_absolute_paths[0]  
-│ │ ├ ..  
-│ │ └ 1999.jpg  
-│ └ vocAnots      ### clone_annotations_folder, clone_annotations_folder_dir  
-│   ├ 0000.xml    #### clone_labels_absolute_paths[0]  
-│   ├ ..  
-│   └ 1999.xml  
-├ 1               ## clone_images_folder  
-├ ..              ## clone_images_folder    
-└ 18
-'''
-
-
-# In[ ]:
-
-
-'''
-new_dataset      # save_dataset_dir  
-├ images          ## save_images_folder  
-│ ├ train         ### data_split['train']  
-│ │ ├ 0000.jpg  
-│ │ └ ..  
-│ ├ val           ### data_split['val']  
-│ │ ├ 0001.jpg  
-│ │ └ ..  
-│ └ test          ### data_split['test']  
-│   ├ 0003.jpg  
-│   └ ..  
-└ labels          ## save_annotations_folder  
-  ├ train  
-  ├ val 
-  └ test
-'''
-
+# # 克隆資料集
+# 
+# ### args:
+# #### Directory
+# 1. clone_dir                 : 來源資料集路徑
+# 2. save_dataset_dir          : 新資料集存放路徑
+# 
+# #### Clone folder name
+# 3. clone_images_folder       : (來源資料集)影像資料夾名稱
+# 4. clone_annotations_folder  : (來源資料集)標籤資料夾名稱
+# 
+# #### Clone file format
+# 5. clone_images_format       : (來源資料集)影像格式 (.jpg, .png etc.)
+# 6. clone_annotations_format  : (來源資料集)標籤格式 (.txt or .xml)
+# 
+# #### Save folder name
+# 7. save_images_folder        : (新資料集)影像資料夾名稱
+# 8. save_annotations_folder   : (新資料集)標籤資料夾名稱
+# 
+# #### Split ratio
+# 9. data_split                : 訓練集、驗證集、測試集比例分配
+# 
+# #### Convert format or not
+# 10. isConvert_format         : 標籤是否轉換格式 (.txt to .xml or .xml to .txt)
+# 
+# #### Dictionary that maps IDs to class names
+# 11. class_mapping            : 自定義標籤 ( {標籤序號: 標籤名稱} )
+# 
+# ### 來源資料集樹狀圖:
+# ```
+# dataset           # clone_dir  
+# ├ 0               ## clone_images_folder  
+# │ ├ img           ### clone_images_folder, clone_images_folder_dir  
+# │ │ ├ 0000.jpg    #### clone_images_absolute_paths[0]  
+# │ │ ├ ..  
+# │ │ └ 1999.jpg  
+# │ └ vocAnots      ### clone_annotations_folder, clone_annotations_folder_dir  
+# │   ├ 0000.xml    #### clone_labels_absolute_paths[0]  
+# │   ├ ..  
+# │   └ 1999.xml  
+# ├ 1               ## clone_images_folder  
+# ├ ..              ## clone_images_folder    
+# └ 18
+# ```
+# 
+# ### 新資料集樹狀圖:
+# ```
+# new_dataset       # save_dataset_dir  
+# ├ images          ## save_images_folder  
+# │ ├ train         ### data_split['train']  
+# │ │ ├ 0000.jpg  
+# │ │ └ ..  
+# │ ├ val           ### data_split['val']  
+# │ │ ├ 0001.jpg  
+# │ │ └ ..  
+# │ └ test          ### data_split['test']  
+# │   ├ 0003.jpg  
+# │   └ ..  
+# └ labels          ## save_annotations_folder  
+#   ├ train  
+#   ├ val 
+#   └ test
+# ```
+# 
+# ### 參考來源
+# 
+# [1] A. Kathuria. "How to Train YOLO v5 on a Custom Dataset." 2021.
+#     [Online]. Available: https://blog.paperspace.com/train-yolov5-custom-data/
+#     [Accessed March 2, 2022]
+# 
+# [2] mjahanifar, S. Gupta. "goodhamgupta/yolo_to_voc.py" 2021.
+#     [Online]. Available: https://gist.github.com/goodhamgupta/7ca514458d24af980669b8b1c8bcdafd?permalink_comment_id=3247266#gistcomment-3247266
+#     [Accessed March 2, 2022]
+# 
 
 # In[ ]:
 
@@ -78,8 +94,8 @@ import xml.etree.ElementTree as ET
 
 # VARIABLE
 ## Directory
-clone_dir = 'C:\\Users\\danielwu\\Desktop\\dataset'
-save_dataset_dir = 'C:\\Users\\danielwu\\Desktop\\new_dataset'
+clone_dir = 'C:\\Users\\danielwu\\Desktop\\test'
+save_dataset_dir = 'C:\\Users\\danielwu\\Desktop\\new_test'
 
 ## Clone folder name
 clone_images_folder = 'img'
