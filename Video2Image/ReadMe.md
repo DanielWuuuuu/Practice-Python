@@ -36,9 +36,9 @@
    (3) 將刪除`all_images`、`check_images`資料夾與`all_voc_labels`資料夾  
 
 4. 執行CASE 'UpdateTransformCreate':  
-   a. 將檢查完的`.xml`檔(母資料夾為`help_check_labels`)更新回`video2image/videoXX/voc_label`資料夾內  
-   b. 將`voc_label`資料夾內`.xml`檔轉成`.txt`檔至`videoXX_img`資料夾內  
-   c. 建立影像空標籤的`.txt`檔  
+   (1) 將檢查完的`.xml`檔(母資料夾為`help_check_labels`)更新回`video2image/videoXX/voc_label`資料夾內  
+   (2) 將`voc_label`資料夾內`.xml`檔轉成`.txt`檔至`videoXX_img`資料夾內  
+   (3) 建立影像空標籤的`.txt`檔  
 
 ### 影片資料夾樹狀圖:
 
