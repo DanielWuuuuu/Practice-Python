@@ -26,6 +26,6 @@ ROOT
 
 3. 載入影像相對應的`labels/xxxxxx.txt`，重新寫入在ROI範圍內之bbox(移除不在ROI範圍內之bbox)。
    
-   ![test001.jpg](C:\Users\danielwu\Desktop\test\test001.jpg)
+   ![test001.jpg](test001.jpg)
    
    如上圖所示，執行後會在影像上畫出綠色及粉色的梯形框，文件檔僅會保留綠色bbox的資訊，紅色bbox將被刪除。
