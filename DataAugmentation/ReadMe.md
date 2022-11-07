@@ -45,12 +45,16 @@ ROOT
 輸出根目錄資料夾樹狀圖：
 
 ```
-saveROOT  
+saveROOT                    # 程式產生  
 ├─ image_and_label_folder  
 │  ├─ image01.jpg  
 │  ├─ image01.txt  
 │  ├─ ..  
 │  ├─ imageXX.jpg  
 │  └─ imageXX.txt  
-└─ image_augmentation_log.txt       # 程式產生
+├─ labels  
+│  ├─ image01.txt  
+│  ├─ ..  
+│  └─ imageXX.txt  
+└─ image_augmentation_log.txt  
 ```
