@@ -1,378 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # 影片轉圖片
-# 
-# ### args:
-# 1. `isLog`         : 是否顯示log
-# 2. `case`          : 功能選擇 ( 參考 case_list )
-# 3. `ROOT`          : 根目錄 (包含原始影片資料夾、創建影像資料夾等)
-# 4. `videos_folder` : 影片母資料夾路徑
-# 5. `interval`      : 幀數間格 (每幾幀擷取一張影像)
-# 6. `method`        : 切割方法 (畫面只有一個主畫面:normal; 畫面有4個子畫面:four_in_one)
-# 7. `class_mapping` : 標籤轉換 (索引:標籤)
-# 
-# *NOTE*  `ROOT`不可以含有此關鍵字:`images`!
-# 
-# ---
-# <a name="FlowChart"></a>
-# ### 流程
-# 
-# 1. 執行CASE:['Video2ImageAndAll'](#Video2ImageAndAll) :  
-#    (1) 將`videos_folder`資料夾內所有影片切成影像，輸出至`video2image`資料夾  
-#    (2) 將切片的影像複製一份至`all_images`資料夾內，待自動標籤用  <br><br>
-# 
-# 2. 另外執行YOLOv5  
-#    `!python detect.py --weights best.pt --source path/ --conf-thres 0.5 --save-txt --name xxx --line-thickness 2 --hide-labels`  
-#    (1) 將`yolov5/runs/detect/xxx/labels`手動複製至`ROOT/videos_folder_all_yolo_labels`  
-#    (2) 將`yolov5/runs/detect/xxx`內之影像手動複製至`ROOT/videos_folder_check_images`  <br><br>
-# 
-# 3. 執行CASE:['Yolo2VocAllocateData'](#Yolo2VocAllocateData) :  
-#    (1) 將`all_yolo_labels`資料夾內`.txt`檔轉成`.xml`檔至`all_voc_labels`資料夾內  
-#    (2) 將`check_images`(對應`all_voc_labels`)每2000筆分配在一個資料夾，母資料夾為`help_check_labels`，接著就可以請同仁幫忙檢查自動標籤是否有誤，使用Labelimg等開源軟體修正`.xml`檔內類別座標資訊  
-#    (3) 將建立`help_check_labels`資料夾，並刪除`all_images`資料夾、`check_images`資料夾、`all_yolo_labels`資料夾與`all_voc_labels`資料夾  <br><br>
-# 
-# 4. 執行CASE:['UpdateTransformCreate'](#UpdateTransformCreate) :  
-#    (1) 手動將檢查完的`.xml`檔(母資料夾為`help_check_labels`)覆蓋原始的`help_check_labels`資料夾  
-#    (2) 將更新後的`.xml`檔移至`video2image/videoXX/voc_labels`資料夾內  
-#    (3) 將`voc_labels`資料夾內`.xml`檔轉成`.txt`檔並分別儲存至`images`資料夾內及`labels`資料夾內  
-#    (4) 建立影像空標籤的`.txt`檔  
-# 
-# ---
-# ### 影片資料夾樹狀圖:
-# 
-# 說明:
-# 1. 資料夾可為多階層 ( 以下為範例 ):
-# 
-# ```
-# ROOT  
-# └─ videos_folder  
-#    ├─ folder1  
-#    │  ├─ video01.MOV  
-#    │  ├─ video02.MOV  
-#    │  └─ ..  
-#    ├─ folder2  
-#    │  ├─ video01.MOV  
-#    │  ├─ video02.MOV  
-#    │  └─ ..  
-#    └─ ..  
-# ```
-# ---
-# <a name="Video2ImageAndAll"></a>
-# ### CASE:'Video2ImageAndAll'
-# 
-# 說明:
-# 1. 依序執行CASE:['Video2Image'](#Video2Image)與CASE:['ImageAllInOne'](#ImageAllInOne)  
-# 
-# [(回流程)](#FlowChart)
-# 
-# ---
-# <a name="Yolo2VocAllocateData"></a>
-# ### CASE:'Yolo2VocAllocateData'
-# 
-# 說明:
-# 1. 前置作業請參考CASE:['Yolo2Voc'](#Yolo2Voc)第1、2點說明
-# 2. 依序執行CASE:['Yolo2Voc'](#Yolo2Voc)與CASE:['AllocateData'](#AllocateData)
-# 3. 額外刪除`all_images`資料夾
-# 
-# [(回流程)](#FlowChart)
-# 
-# ---
-# <a name="UpdateTransformCreate"></a>
-# ### CASE:'UpdateTransformCreate'
-# 
-# 說明:
-# 1. 依序執行CASE:['UpdateLabels'](#UpdateLabels)、CASE:['Voc2Yolo'](#Voc2Yolo)與CASE:['CreateNullTxt'](#CreateNullTxt)
-# 
-# [(回流程)](#FlowChart)
-# 
-# ---
-# <a name="Video2Image"></a>
-# ### CASE:'Video2Image'
-# 
-# 說明:
-# 1. 影片切成影像
-# 2. 輸出影像資料夾樹狀圖 ( 階層會與來源相同 ):
-# 
-# ```
-# ROOT  
-# ├─ videos_folder              # 原始影片，執行此CASE後，刪除此資料夾!  
-# ├─ videos_folder_video2image  # 執行此CASE後，輸出  
-# │  ├─ folder1  
-# │  │  ├─ video01  
-# │  │  │  ├─ images            # 影片 > 影像儲存資料夾  
-# │  │  │  │  ├─ 000000.jpg  
-# │  │  │  │  ├─ ..  
-# │  │  │  │  └─ 000010.jpg  
-# │  │  │  ├─ video01.MOV        # 「搬移」原始影片
-# │  │  │  └ video01_path.txt    # 影像絕對路徑
-# │  │  ├─ ..  
-# │  │  └─ videoXX  
-# │  │     ├─ images  
-# │  │     │  ├─ 000000.jpg  
-# │  │     │  ├─ ..  
-# │  │     │  └─ 000020.jpg  
-# │  │     ├─ videoXX.MOV  
-# │  │     └ videoXX_path.txt  
-# │  ├─ folder2  
-# │  │  ├─ video01  
-# │  │  ├─ ..  
-# │  │  └─ videoXX  
-# │  └─ ..  
-# └ video2image_image_paths.txt  # 執行此CASE後，輸出  
-# ```
-# 3. video2image_image_paths.txt為儲存切片後各影像的路徑
-# 
-# [(回CASE:'Video2ImageAndAll')](#Video2ImageAndAll)
-# 
-# ---
-# <a name="ImageAllInOne"></a>
-# ### CASE:'ImageAllInOne'
-# 
-# 說明:
-# 1. 將在各個資料夾內的影像複製出來放在`all_images`資料夾內 ( YOLO自動標籤用 )
-# 2. 輸出影像資料夾樹狀圖 ( 輸出的影像序號會接續下去 ):
-# 
-# ```
-# ROOT  
-# ├─ videos_folder_all_images     # 執行此CASE後，輸出  
-# │  ├─ 000000.jpg  
-# │  ├─ ..  
-# │  └─ xxxxxx.jpg  
-# ├─ videos_folder_video2image    # 執行CASE:'Video2Image'後輸出  
-# ├─ allinone_image_paths.txt     # 執行此CASE後，輸出 ( 如第4點範例 )  
-# └─ video2image_image_paths.txt  # 執行CASE:'Video2Image'後輸出  
-# ```
-# 3. allinone_image_paths.txt資訊如下:
-# 
-# ```
-# ## # <video2image Relative Path>\n')
-# ## image basename of all_images: image relative paht of video2image
-# 
-# # folder1/video01/images
-# 000000.jpg : folder1/video01/images/000000.jpg
-# ..
-# 000010.jpg : folder1/video01/images/000010.jpg
-# 
-# # folder1/videoXX/images
-# 000011.jpg : folder1/videoXX/images/000000.jpg
-# ..
-# 000031.jpg : folder1/videoXX/images/000020.jpg
-# ..
-# ```
-# 
-# [(回CASE:'Video2ImageAndAll')](#Video2ImageAndAll)
-# 
-# ---
-# <a name="Yolo2Voc"></a>
-# ### CASE:'Yolo2Voc'
-# 
-# 說明:
-# 1. 將`all_yolo_labels`資料夾內`.txt`檔轉成`.xml`檔至`all_voc_labels`資料夾內
-# 2. 先執行YOLO v5 detect.py:
-#    `!python detect.py --weights best.pt --source path/ --conf-thres 0.5 --save-txt --name xxx --line-thickness 2 --hide-labels`  
-#    (1) 將`yolov5/runs/detect/expXX/labels`手動複製至`ROOT/videos_folder_all_yolo_labels`  
-#    (2) 將`yolov5/runs/detect/expXX`內之影像手動複製至`ROOT/videos_folder_check_images`  
-# 3. 執行完YOLO v5 detect.py後，再執行此CASE
-# 4. 輸出標籤資料夾樹狀圖:
-# 
-# ```
-# ROOT  
-# ├─ videos_folder_all_voc_labels   # 執行此CASE後，輸出  
-# │  ├─ 000000.xml  
-# │  ├─ ..  
-# │  └─ xxxxxx.xml  
-# ├─ videos_folder_all_yolo_labels  # 手動將YOLO偵測物件輸出的.txt檔放入此資料夾  
-# │  ├─ 000000.txt  
-# │  ├─ ..  
-# │  └─ xxxxxx.txt  
-# ├─ videos_folder_check_images     # 手動將YOLO偵測物件輸出的.jpg檔放入此資料夾  
-# │  ├─ 000000.jpg  
-# │  ├─ ..  
-# │  └─ xxxxxx.jpg  
-# ├─ videos_folder_all_images       # 執行CASE:'ImageAllInOne'後輸出  
-# ├─ videos_folder_video2image      # 執行CASE:'Video2Image'後輸出  
-# ├─ allinone_image_paths.txt       # 執行CASE:'ImageAllInOne'後輸出  
-# └─ video2image_image_paths.txt    # 執行CASE:'Video2Image'後輸出  
-# ```
-# 
-# [(回CASE:'Yolo2VocAllocateData')](#Yolo2VocAllocateData)
-# 
-# ---
-# <a name="AllocateData"></a>
-# ### CASE:'AllocateData'
-# 
-# 說明:
-# 1. 將`check_images`資料夾內影像及`all_voc_labels`資料夾內標籤檔按比例重新分配，
-#    每2000個檔案放在一個資料夾，接著就可以請同仁們幫忙檢查自動標籤是否有誤，並手動修正
-# 2. 執行後將刪除`all_images`資料夾、`all_voc_labels`資料夾、`all_yolo_labels`資料夾與`check_images`資料夾
-# 3. 分配資料夾樹狀圖:
-# 
-# ```
-# ROOT  
-# ├─ videos_folder_all_images         # 執行此CASE後，刪除此資料夾!  
-# ├─ videos_folder_all_voc_labels     # 執行此CASE後，刪除此資料夾!  
-# ├─ videos_folder_all_yolo_labels    # 執行此CASE後，刪除此資料夾!  
-# ├─ videos_folder_check_images       # 執行此CASE後，刪除此資料夾!  
-# ├─ videos_folder_help_check_labels  # 執行此CASE後，輸出  
-# │  ├─ 0  
-# │  │  ├─ images  
-# │  │  │  ├─ 000000.jpg  
-# │  │  │  ├─ ..  
-# │  │  │  └─ 001999.jpg  
-# │  │  └─ labels  
-# │  │     ├─ 000000.xml  
-# │  │     ├─ ..  
-# │  │     └─ 001999.xml  
-# │  ├─ 1  
-# │  │  ├─ images  
-# │  │  │  ├─ 002000.jpg  
-# │  │  │  ├─ ..  
-# │  │  │  └─ 003999.jpg  
-# │  │  └─ labels  
-# │  │     ├─ 002000.xml  
-# │  │     ├─ ..  
-# │  │     └─ 003999.xml  
-# │  └─ ..  
-# ├─ videos_folder_video2image        # 執行CASE:'Video2Image'後輸出  
-# ├─ allinone_image_paths.txt         # 執行CASE:'Video2Image'後輸出  
-# └─ video2image_image_paths.txt      # 執行CASE:'ImageAllInOne'後輸出  
-# ```
-# 
-# [(回CASE:'Yolo2VocAllocateData')](#Yolo2VocAllocateData)
-# 
-# ---
-# <a name="UpdateLabels"></a>
-# ### CASE:'UpdateLabels'
-# 
-# 說明:
-# 1. 更新自動標籤檔: 將各個資料夾內檢查好的`.xml`檔放回`video2image`資料夾
-# 2. 同仁們檢查好標籤後，請同仁們回傳整個`help_check_labels`資料夾(子資料夾`images`可不用回傳)
-# 3. 將回傳的`help_check_labels`資料夾覆蓋回自己原本的`help_check_labels`資料夾 
-#    ( 更新標籤檔: 檔案已存在 => 勾選 全部取代 )
-# 4. 執行前資料夾樹狀圖:
-# 
-# ```
-# ROOT  
-# ├─ videos_folder_help_check_labels  # 手動將檢查好的help_check_labels資料夾覆蓋回來  
-# ├─ videos_folder_video2image        # 執行CASE:'Video2Image'後輸出  
-# ├─ allinone_image_paths.txt         # 執行CASE:'Video2Image'後輸出  
-# └─ video2image_image_paths.txt      # 執行CASE:'ImageAllInOne'後輸出  
-# ```
-# 5. 執行後資料夾樹狀圖(刪除`help_check_labels`資料夾):
-# 
-# ```
-# ROOT  
-# ├─ videos_folder_video2image  
-# │  ├─ folder1  
-# │  │  ├─ video01  
-# │  │  │  ├─ images  
-# │  │  │  ├─ voc_labels              # 執行此CASE後，輸出  
-# │  │  │  │  ├─ 000000.xml    
-# │  │  │  │  ├─ ..  
-# │  │  │  │  └─ 000010.xml  
-# │  │  │  ├─ video01.MOV  
-# │  │  │  └ video01_path.txt  
-# │  │  ├─ ..  
-# │  │  └─ videoXX  
-# │  │     ├─ images  
-# │  │     ├─ voc_labels              # 執行此CASE後，輸出  
-# │  │     │  ├─ 000000.xml  
-# │  │     │  ├─ ..  
-# │  │     │  └─ 000020.xml  
-# │  │     ├─ videoXX.MOV  
-# │  │     └ videoXX_path.txt  
-# │  ├─ folder2  
-# │  │  ├─ video01  
-# │  │  ├─ ..  
-# │  │  └─ videoXX  
-# │  └─ ..  
-# ├─ allinone_image_paths.txt         # 執行CASE:'Video2Image'後輸出  
-# └─ video2image_image_paths.txt      # 執行CASE:'ImageAllInOne'後輸出  
-# ```
-# 
-# [(回CASE:'UpdateTransformCreate')](#UpdateTransformCreate)
-# 
-# ---
-# <a name="Voc2Yolo"></a>
-# ### CASE:'Voc2Yolo'
-# 
-# 說明:
-# 1. 將標籤檔VOC格式(`.xml`)轉成YOLO格式(`.txt`)
-# 2. 對`video2image`資料夾內每個`voc_labels`資料夾的`.xml`檔進行格式轉換，並儲存在`images`資料夾內及`labels`資料夾內
-# 
-# ```
-# ROOT  
-# ├─ videos_folder_video2image  
-# │  ├─ folder1  
-# │  │  ├─ video01  
-# │  │  │  ├─ images  
-# │  │  │  │  ├─ 000000.jpg  
-# │  │  │  │  ├─ 000000.txt           # 執行此CASE後，輸出  
-# │  │  │  │  ├─ 000001.jpg  
-# │  │  │  │  ├─ 000002.jpg  
-# │  │  │  │  ├─ 000002.txt           # 執行此CASE後，輸出  
-# │  │  │  │  ├─ 000003.jpg  
-# │  │  │  │  └─ ..  
-# │  │  │  ├─ labels  
-# │  │  │  │  ├─ 000000.txt           # 執行此CASE後，輸出  
-# │  │  │  │  ├─ 000002.txt           # 執行此CASE後，輸出  
-# │  │  │  │  └─ ..  
-# │  │  │  ├─ voc_labels  
-# │  │  │  │  ├─ 000000.xml  
-# │  │  │  │  └─ 000002.xml  
-# │  │  │  ├─ video01.MOV  
-# │  │  │  └ video01_path.txt  
-# │  │  └─ ..   
-# │  └─ ..  
-# ├─ allinone_image_paths.txt         # 執行CASE:'Video2Image'後輸出  
-# └─ video2image_image_paths.txt      # 執行CASE:'ImageAllInOne'後輸出  
-# ```
-# 
-# [(回CASE:'UpdateTransformCreate')](#UpdateTransformCreate)
-# 
-# ---
-# <a name="CreateNullTxt"></a>
-# ### CASE:'CreateNullTxt'
-# 
-# 說明:
-# 1. 建立影像空標籤的`.txt`檔
-# 
-# ```
-# ROOT  
-# ├─ videos_folder_video2image  
-# │  ├─ folder1  
-# │  │  ├─ video01  
-# │  │  │  ├─ images  
-# │  │  │  │  ├─ 000000.jpg  
-# │  │  │  │  ├─ 000000.txt  
-# │  │  │  │  ├─ 000001.jpg  
-# │  │  │  │  ├─ 000001.txt           # 執行此CASE後，輸出  
-# │  │  │  │  ├─ 000002.jpg  
-# │  │  │  │  ├─ 000002.txt  
-# │  │  │  │  ├─ 000003.jpg  
-# │  │  │  │  └─ ..  
-# │  │  │  ├─ labels  
-# │  │  │  │  ├─ 000000.txt  
-# │  │  │  │  ├─ 000001.txt           # 執行此CASE後，輸出  
-# │  │  │  │  ├─ 000002.txt  
-# │  │  │  │  └─ ..  
-# │  │  │  ├─ voc_labels  
-# │  │  │  │  ├─ 000000.xml  
-# │  │  │  │  └─ 000002.xml  
-# │  │  │  ├─ video01.MOV  
-# │  │  │  └ video01_path.txt  
-# │  │  └─ ..   
-# │  └─ ..  
-# ├─ allinone_image_paths.txt         # 執行CASE:'Video2Image'後輸出  
-# └─ video2image_image_paths.txt      # 執行CASE:'ImageAllInOne'後輸出  
-# ```
-# 
-# [(回CASE:'UpdateTransformCreate')](#UpdateTransformCreate)
-# 
-# ---
-# 
-
 # In[1]:
 
 
@@ -381,6 +9,7 @@
 ###############################################
 import os
 import shutil
+import numpy as np
 from tqdm.notebook import tqdm
 
 
@@ -396,7 +25,6 @@ from tqdm.notebook import tqdm
 #  @return col
 #  @date 20220318  danielwu
 def GetCmdSize():
-    import shutil
     col, _ = shutil.get_terminal_size()
     col = col - 21
     return col
@@ -427,6 +55,66 @@ def GetPaths(folder, extension='.MOV'):
     
     return paths
 
+## @brief Description: 比較兩影像之差異
+#
+#  @param [in] imageA  影像 A
+#  @param [in] imageB  影像 B
+#
+#  @return change 影像 A與影像 B之差異性
+#  @date  20230316  danielwu 
+def DiffImages(imageA, imageB):
+    # convert the images to grayscale
+    grayA = cv2.cvtColor(imageA, cv2.COLOR_BGR2GRAY)
+    grayB = cv2.cvtColor(imageB, cv2.COLOR_BGR2GRAY)
+
+    # blur the imagess
+    kernelB = (5, 5)
+    blurA = cv2.GaussianBlur(grayA, kernelB, 0)
+    blurB = cv2.GaussianBlur(grayB, kernelB, 0)
+
+    # erode the images
+    kernelE = cv2.getStructuringElement(cv2.MORPH_RECT, (7, 7))
+    erodeA = cv2.erode(blurA, kernelE)
+    erodeB = cv2.erode(blurB, kernelE)
+
+    # compare the two images using cv2.absdiff
+    diffErode = cv2.absdiff(erodeA, erodeB)
+    changeErode = np.average(diffErode)
+    
+    return changeErode
+
+## @brief Description: 調整影像尺寸(補上黑邊)
+#
+#  @param [in] image     輸入影像
+#  @param [in] new_size  欲調整尺寸
+#
+#  @return resized_image 調整後之影像
+#  @date  20230516  danielwu 
+def ResizeImagewithBorder(image, new_size):
+    # get the input image size
+    h, w = image.shape[:2]
+
+    # get the scaled size
+    if w > h:
+        new_w = new_size
+        new_h = int(h * new_size / w)
+    else:
+        new_h = new_size
+        new_w = int(w * new_size / h)
+
+    # scale the input image
+    resized_image = cv2.resize(image, (new_w, new_h), interpolation=interpolation)
+
+    # fill the black border
+    if is_Border:
+        border_w = (new_size - new_w) // 2
+        border_h = (new_size - new_h) // 2
+        border_type = cv2.BORDER_CONSTANT
+        border_color = (0, 0, 0)
+        resized_image = cv2.copyMakeBorder(resized_image, border_h, border_h, border_w, border_w, border_type, value=border_color)
+
+    return resized_image
+
 ## @brief Description: 影片轉成影像
 #
 #  @param [in] video_path  影片路徑
@@ -434,7 +122,7 @@ def GetPaths(folder, extension='.MOV'):
 #  @param [in] interval    幀數間格
 #
 #  @return None
-#  @date  20220318  danielwu 
+#  @date  20230316  danielwu 
 def CutVideo(video_path, save_dir, interval=1):
     frame_count = 0  # 保存幀的索引
     frame_index = 0  # 原影片的幀樹索引 ( interval * frame_count = frame_index )
@@ -452,8 +140,46 @@ def CutVideo(video_path, save_dir, interval=1):
         if ret == False:
             continue
         if frame_index % interval == 0:
-            cv2.imwrite(os.path.join(save_dir, '{}.jpg'.format(frame_count).zfill(10)), frame)
-            frame_count += 1
+            if is_Resize:
+                if is_KeepRatio:
+                    if is_Border:
+                        image_name = f'resize_{single_resize}p_border_{frame_count:06d}.jpg'
+                    else:
+                        image_name = f'resize_{single_resize}_{frame_count:06d}.jpg'
+                else:
+                    image_name = f'resize_{resize_shape[1]}p_{frame_count:06d}.jpg'
+            else:
+                image_name = f'{frame_count:06d}.jpg'
+            
+            if frame_count == 0:
+                pre_frame = frame
+                
+                if is_Resize:
+                    if is_KeepRatio:
+                        frame = ResizeImagewithBorder(frame, single_resize)
+                    else:
+                        frame = cv2.resize(frame, resize_shape, interpolation=interpolation)
+                
+                cv2.imwrite(os.path.join(save_dir, image_name), frame)
+                frame_count += 1
+            else:
+                # compare pre-frame and current frame 
+                # if difference value over than thresth,
+                # save current frame
+                change = DiffImages(pre_frame, frame)
+                pre_frame = frame
+                
+                if change < 1.5:
+                    continue
+                
+                if is_Resize:
+                    if is_KeepRatio:
+                        frame = ResizeImagewithBorder(frame, single_resize)
+                    else:
+                        frame = cv2.resize(frame, resize_shape, interpolation=interpolation)
+                
+                cv2.imwrite(os.path.join(save_dir, image_name), frame)
+                frame_count += 1
         frame_index += 1
     cap.release()
 
@@ -464,7 +190,7 @@ def CutVideo(video_path, save_dir, interval=1):
 #  @param [in] interval    幀數間格
 #
 #  @return None
-#  @date  20221026  danielwu 
+#  @date  20230316  danielwu 
 def FourinOneCutVideo(video_path, save_dir, interval=1):
     frame_count = 0
     frame_index = 0
@@ -475,12 +201,12 @@ def FourinOneCutVideo(video_path, save_dir, interval=1):
     dw = w//2
     dh = h//2
     
-    cuts = ['all_in_one', 'left_top', 'right_top', 'left_bottom', 'right_bottom']
-    coordinates = {cuts[0] : [0, 0, w, h],
-                   cuts[1] : [0, 0, dw, dh],
-                   cuts[2] : [dw, 0, dw, dh],
-                   cuts[3] : [0, dh, dw, dh],
-                   cuts[4] : [dw, dh, dw, dh]}
+    cuts = ['left_top', 'right_top', 'left_bottom', 'right_bottom', 'all_in_one']
+    coordinates = {cuts[0] : [0, 0, dw, dh],
+                   cuts[1] : [dw, 0, dw, dh],
+                   cuts[2] : [0, dh, dw, dh],
+                   cuts[3] : [dw, dh, dw, dh],
+                   cuts[4] : [0, 0, w, h],}
         
     if cap.isOpened():
         ret = True
@@ -491,30 +217,81 @@ def FourinOneCutVideo(video_path, save_dir, interval=1):
     
     for cut in cuts:
         MakeDirs(os.path.join(save_dir, cut))
-
+        
+    pre_subframe = []
+    
     while(ret):
         ret, frame = cap.read()
         if ret == False:
             continue
         
         if frame_index % interval == 0:
-            for cut in cuts:
+            if is_Resize:
+                if is_KeepRatio:
+                    if is_Border:
+                        image_name = f'resize_{single_resize}p_border_{frame_count:06d}.jpg'
+                    else:
+                        image_name = f'resize_{single_resize}_{frame_count:06d}.jpg'
+                else:
+                    image_name = f'resize_{resize_shape[1]}p_{frame_count:06d}.jpg'
+            else:
+                image_name = f'{frame_count:06d}.jpg'
+            
+            for i, cut in enumerate(cuts):
                 x, y, w, h = coordinates[cut]
                 subframe = frame[y : y+h, x : x+w]
                 
-                cv2.imwrite(os.path.join(save_dir, cut, '{}.jpg'.format(frame_count).zfill(10)), subframe)
+                # 'left_top', 'right_top', 'left_bottom', 'right_bottom'
+                if i != 4:
+                    if frame_count == 0:
+                        pre_subframe.append(subframe)
+                        
+                        if is_Resize:
+                            if is_KeepRatio:
+                                subframe = ResizeImagewithBorder(subframe, single_resize)
+                            else:
+                                subframe = cv2.resize(subframe, resize_shape, interpolation=interpolation)
+                        
+                        cv2.imwrite(os.path.join(save_dir, cut, image_name), subframe)
+                        
+                    else:
+                        # compare pre-frame and current frame 
+                        # if difference value over than thresth,
+                        # save current frame
+                        change = DiffImages(pre_subframe[i], subframe)
+                        pre_subframe[i] = subframe
+                        
+                        if change < 1.5:
+                            continue
+                        
+                        if is_Resize:
+                            if is_KeepRatio:
+                                subframe = ResizeImagewithBorder(subframe, single_resize)
+                            else:
+                                subframe = cv2.resize(subframe, resize_shape, interpolation=interpolation)
+                        
+                        cv2.imwrite(os.path.join(save_dir, cut, image_name), subframe)
                 
-            frame_count += 1
+                # 'all_in_one'
+                elif i == 4:
+                    if is_Resize:
+                        if is_KeepRatio:
+                            subframe = ResizeImagewithBorder(subframe, single_resize)
+                        else:
+                            subframe = cv2.resize(subframe, resize_shape, interpolation=interpolation)
+                    
+                    cv2.imwrite(os.path.join(save_dir, cut, image_name), subframe)
+                    frame_count += 1
         frame_index += 1
     cap.release()
 
-def StartVideo2Image(ROOT, videos_folder, cut_method):
+def StartVideo2Image(ROOT, videos_folder, cut_method, file_exe='.MOV'):
     # Get Video Paths from ROOT (Video is .MOV file)
     videos_folder_path = os.path.join(ROOT, videos_folder)
-    video_paths = GetPaths(videos_folder_path, extension='.mp4')
+    video_paths = GetPaths(videos_folder_path, extension=file_exe)
     
     if video_paths == []:
-        print('There is not any .MOV file in the {}'.format(videos_folder_path))
+        print('There is not any {} file in the {}'.format(file_exe, videos_folder_path))
         print('Please put the video you want to cut into this folder!')
         return
 
@@ -540,8 +317,20 @@ def StartVideo2Image(ROOT, videos_folder, cut_method):
         else:
             print('Cutting method is wrong! Please select "normal" or "four_in_one"!\n')
             return
-        shutil.move(video_path, save_path)
-
+        
+        if not is_Sound:
+            # is_Sound == False: output video without sound
+            video_save_path = os.path.join(save_path, basename)
+            with VideoFileClip(video_path) as video:
+                video = video.without_audio()
+                video.write_videofile(video_save_path, codec="libx264", logger=None)
+            try:
+                os.remove(video_path)
+            except:
+                print(f'Can not remove {video_path}')
+        else:
+            shutil.move(video_path, save_path)
+        
         # Create the .txt file and write image paths into the file
         txt_file = '{}_image_paths.txt'.format(name)
         txt_path = os.path.join(save_path, txt_file)
@@ -558,7 +347,7 @@ def StartVideo2Image(ROOT, videos_folder, cut_method):
     shutil.rmtree(videos_folder_path)
 
     # Create the .txt file and write all image paths into the file
-    txt_file = 'video2image_image_paths.txt'
+    txt_file = '{}_video2image_image_paths.txt'.format(videos_folder)
     txt_path = os.path.join(ROOT, txt_file)
     with open(txt_path, 'w') as f:
         for image_path in all_image_paths:
@@ -573,7 +362,7 @@ def StartVideo2Image(ROOT, videos_folder, cut_method):
         print('case: Video2Image done!')
 
 def StartImageAllInOne(ROOT, videos_folder):
-    info_txt_path = os.path.join(ROOT, 'video2image_image_paths.txt')
+    info_txt_path = os.path.join(ROOT, '{}_video2image_image_paths.txt'.format(videos_folder))
     all_image_paths = []
     
     if os.path.isfile(info_txt_path):
@@ -602,15 +391,18 @@ def StartImageAllInOne(ROOT, videos_folder):
 
     save_path = os.path.join(ROOT, '{}_all_images'.format(videos_folder))
     MakeDirs(save_path)
-
+    
+    # Remove 'all_in_one' images
+    all_image_paths = [path for path in all_image_paths if 'all_in_one' not in path]
+    
     # Copy images from video2image folder to all_images folder
-    for count, image_path in enumerate(all_image_paths):
+    for count, image_path in enumerate(tqdm(all_image_paths)):
         basename = os.path.basename(image_path)
         save_image_path = os.path.join(save_path, '{}.jpg'.format(str(count).zfill(6)))
         shutil.copy(image_path, save_image_path)
 
     # Create the .txt file and write (new image name: image original path)
-    txt_file = 'allinone_image_paths.txt'
+    txt_file = '{}_allinone_image_paths.txt'.format(videos_folder)
     txt_path = os.path.join(ROOT, txt_file)
     with open(txt_path, 'w') as f:
         flag = ''
@@ -726,72 +518,85 @@ def Yolo2Voc(label_path, image_path, save_folder):
 def StartYolo2Voc(ROOT, videos_folder):
     check_images_path = os.path.join(ROOT, '{}_check_images'.format(videos_folder))
     yolo_labels_path = os.path.join(ROOT, '{}_all_yolo_labels'.format(videos_folder))
-    image_paths = GetPaths(check_images_path, extension='.jpg')
-    txt_paths = GetPaths(yolo_labels_path, extension='.txt')
+    image_replace = False
     
-    if txt_paths == []:
-        print('There is not any .txt file in the {}'.format(yolo_labels_path))
-        print('Please manually copy .txt file from yolo detect to this folder!')
+    if os.path.isdir(yolo_labels_path):
+        txt_paths = GetPaths(yolo_labels_path, extension='.txt')
+        
+        if not os.path.isdir(check_images_path):
+            image_replace = True
+            print('Yolo label folder is exist, but check image folder is not exist')
+            print('Check image folder is replaced by all image folder')
+            
+        if txt_paths == []:
+            print('There is not any .txt file in the {}'.format(yolo_labels_path))
+            print('Skip case: Yolo2Voc')
+            print('='*col)
+            return
+    else:
+        print('Yolo label folder is not exist')
+        print('Skip case: Yolo2Voc')
+        print('='*col)
         return
-    if image_paths == []:
-        print('There is not any .jpg file in the {}'.format(check_images_path))
-        print('Please manually copy .jpg file from yolo detect to this folder!')
-        return
-
+    
     voc_labels_path = os.path.join(ROOT, '{}_all_voc_labels'.format(videos_folder))
     MakeDirs(voc_labels_path)
 
-    for txt_path in txt_paths:
+    for txt_path in tqdm(txt_paths):
         # txt_path = '~/video_folder_all_yolo_labels/xxxxxx.txt'
         # image_path = '~/video_folder_check_images/xxxxxx.jpg'
-        image_path = txt_path.replace('all_yolo_labels', 'check_images')
+        
+        if image_replace:
+            image_path = txt_path.replace('all_yolo_labels', 'all_images')
+        else:
+            image_path = txt_path.replace('all_yolo_labels', 'check_images')
         image_path = image_path.replace('.txt', '.jpg')
-
+        
         Yolo2Voc(txt_path, image_path, voc_labels_path)
     
     if isLog:
         print('case: Yolo2Voc done!')
+        print('='*col)
 
 def StartAllocateData(ROOT, videos_folder):
     check_images_path = os.path.join(ROOT, '{}_check_images'.format(videos_folder))
     help_check_path = os.path.join(ROOT, '{}_help_check_labels'.format(videos_folder))
-    voc_labels_path = os.path.join(ROOT, '{}_all_voc_labels'.format(videos_folder))
     yolo_labels_path = os.path.join(ROOT, '{}_all_yolo_labels'.format(videos_folder))
+    image_replace = False
+    
+    if not os.path.isdir(check_images_path):
+        image_replace = True
+        check_images_path = os.path.join(ROOT, '{}_all_images'.format(videos_folder))
+        
     image_paths = GetPaths(check_images_path, extension='.jpg')
     
-    for count, image_path in enumerate(image_paths):
-        folder_idx = count // 2000                          # 一個資料夾2000筆資料
+    for count, image_path in enumerate(tqdm(image_paths)):
+        folder_idx = count // members                          # 一個資料夾members筆資料
         save_image = os.path.join(help_check_path, str(folder_idx), 'images')
         save_label = os.path.join(help_check_path, str(folder_idx), 'labels')
         for f in [save_image, save_label]:
             MakeDirs(f)
-        
-        label_path = image_path.replace('check_images', 'all_voc_labels')
+            
+        if image_replace:
+            label_path = image_path.replace('all_images', 'all_voc_labels')
+        else:
+            label_path = image_path.replace('check_images', 'all_voc_labels')
         label_path = label_path.replace('.jpg', '.xml')
         
-        # Move Original Image To New Folder
-        shutil.move(image_path, save_image)
-        # Move Original Label To New Folder
+        # copy Original Image To New Folder
+        shutil.copy(image_path, save_image)
+        # copy Original Label To New Folder
         if os.path.isfile(label_path):
-            shutil.move(label_path, save_label)
-    
-    # Remove check_images and all_voc_labels folder (they are empty folders)
-    shutil.rmtree(check_images_path)
-    shutil.rmtree(voc_labels_path)
-    # Remove old .txt files (using yolo to auto labeling)
-    shutil.rmtree(yolo_labels_path)
+            shutil.copy(label_path, save_label)
     
     if isLog:
         print('Create {} folder'.format(os.path.basename(help_check_path)))
-        print('Remove {} folder'.format(os.path.basename(check_images_path)))
-        print('Remove {} folder'.format(os.path.basename(voc_labels_path)))
-        print('Remove {} folder'.format(os.path.basename(yolo_labels_path)))
-        print('='*col)
         print('case: AllocateData done!')
+        print('='*col)
 
 def StartUpdateLabels(ROOT, videos_folder):
     help_check_path = os.path.join(ROOT, '{}_help_check_labels'.format(videos_folder))
-    info_txt_path = os.path.join(ROOT, 'allinone_image_paths.txt')
+    info_txt_path = os.path.join(ROOT, '{}_allinone_image_paths.txt'.format(videos_folder))
     
     # Read the allinone_image_paths.txt file,
     # and create a dictionary: relative_path, its key and value are:
@@ -813,7 +618,7 @@ def StartUpdateLabels(ROOT, videos_folder):
     # Get .xml file paths from help_check_labels folder
     xml_paths = GetPaths(help_check_path, extension='.xml')
     
-    for xml_path in xml_paths:
+    for xml_path in tqdm(xml_paths):
         basename = os.path.basename(xml_path)      # xxxxxx.xml
         prefix_basename = basename.split('.')[0]   # xxxxxx
         
@@ -835,13 +640,14 @@ def StartUpdateLabels(ROOT, videos_folder):
         # Cut .xml file from help_check_labels folder to video2image folder
         shutil.move(xml_path, save_path)
 
+
     # Remove help_check_labels folder (the folder is for staged mission)
     shutil.rmtree(help_check_path)
         
     if isLog:
         print('Remove {} folder'.format(os.path.basename(help_check_path)))
-        print('='*col)
         print('case: UpdateLabels done!')
+        print('='*col)
 
 # Function to get the data from XML Annotation (for .xml to .txt: part 1)
 def ExtractInfoFromXml(xml_file):
@@ -920,7 +726,7 @@ def StartVoc2Yolo(ROOT, videos_folder):
     # Get .xml file paths from video2image folder
     xml_paths = GetPaths(video2image_path, extension='.xml')
     
-    for xml_path in xml_paths:
+    for xml_path in tqdm(xml_paths):
         # Read .xml information
         info_dict = ExtractInfoFromXml(xml_path)
         
@@ -944,9 +750,10 @@ def StartVoc2Yolo(ROOT, videos_folder):
     
     if isLog:
         print('case: Voc2Yolo done!')
+        print('='*col)
 
 def StartCreateNullTxt(ROOT, videos_folder):
-    info_txt_path = os.path.join(ROOT, 'video2image_image_paths.txt')
+    info_txt_path = os.path.join(ROOT, '{}_video2image_image_paths.txt'.format(videos_folder))
     video2image_path = os.path.join(ROOT, '{}_video2image'.format(videos_folder))
     all_image_paths=[]
     
@@ -973,9 +780,12 @@ def StartCreateNullTxt(ROOT, videos_folder):
             print('There is not any .jpg file in the {}'.format(video2image_path))
             print('Error: Can not do the case: "CreateNullTxt"!')
             return
-        
+    
+    # exclude all_in_one images
+    all_image_paths = [path for path in all_image_paths if 'all_in_one' not in path]
+    
     # Create null txt file
-    for image_path in all_image_paths:        
+    for image_path in tqdm(all_image_paths):        
         # Convert image path to yolo label path
         # image_path = '~\videoXX\images\xxxxxx.jpg'
         # save_path_fimages = '~\videoXX\images\xxxxxx.txt'
@@ -993,6 +803,7 @@ def StartCreateNullTxt(ROOT, videos_folder):
     
     if isLog:
         print('case: StartCreateNullTxt done!')
+        print('='*col)
 
 
 # In[12]:
@@ -1014,21 +825,47 @@ case_list = {
 ###############################################
 #        G L O B A L   V A R I A B L E
 ###############################################
-isLog = True # Print log
-case = case_list['UpdateTransformCreate']
-ROOT = 'D:\\Dataset\\Sumitomo(CM088A)\\'
-videos_folder = '221026'
+isLog = True # print log
+case = case_list['Video2ImageAndAll']
+ROOT = 'E:\\Dataset\\DMS\\'
+videos_folder = 'EBDD'
 
 ## CASE: 'Video2Image'
-interval = 15     # Save an image every <interval> frames
-method = 'normal' # Select "normal" or "four_in_one"
+if case == 0:
+    import cv2
+    
+    interval = 10 # Save an image every <interval> frames
+    cut_method = 'normal' # Select "normal" or "four_in_one"
+    file_exe = '.MP4' # video extension
+    is_Resize = False
+    is_KeepRatio = True # father factor is is_Resize, it will keep aspect ratio
+    is_Border = False # father factor is is_Resize / is_KeepRatio, it will fill black border if input image is not a square
+    single_resize = 640 # use it when is_KeepRatio is true
+    resize_shape = (640, 480) # use it when is_KeepRatio is false
+    interpolation = cv2.INTER_AREA # zoom out image usually set to cv2.INTER_AREA, zoom in image usually set to cv2.INTER_CUBIC
+    is_Sound = False # video with sound or not. True: output video equal original video, False: output video without sound
 
 ## For CASE: 'Yolo2Voc', 'Voc2Yolo'
 # Dictionary that maps IDs to class names
-class_mapping = {
-    '0': 'person',
-    '1': 'cone'
-}
+if case != 0:
+    members = 1000 # 一個資料夾 members 筆資料
+
+# prj: DMS, for case: Yolo2VocAllocateData
+    class_mapping = {
+        '0': 'normal_face',
+        '1': 'mask_face',
+        '2': 'opened_eye',
+        '3': 'closed_eye',
+        '4': 'nose',
+        '5': 'yawning',
+        '6': 'handing',
+        '7': 'smoking',
+        '8': 'phone',
+        '9': 'cigarette',
+        '10': 'vape',
+        '11': 'cup',
+        '12': 'bottle'
+    }
 
 
 # In[13]:
@@ -1043,9 +880,10 @@ if __name__ == '__main__':
     
     # Case: Video2ImageAndAll
     if case == 0:
-        import cv2
+        if not is_Sound:
+            from moviepy.editor import VideoFileClip
         
-        StartVideo2Image(ROOT, videos_folder, method)
+        StartVideo2Image(ROOT, videos_folder, cut_method, file_exe)
         StartImageAllInOne(ROOT, videos_folder)
     
     # Case: Yolo2VocAllocateData
@@ -1057,18 +895,51 @@ if __name__ == '__main__':
         StartYolo2Voc(ROOT, videos_folder)
         StartAllocateData(ROOT, videos_folder)
         
-        # Remove all_images folder if it exist
-        all_images = os.path.join(ROOT, '{}_all_images'.format(videos_folder))
-        if os.path.exists(all_images):
+        try:
+            # Remove all_images folder
+            all_images = os.path.join(ROOT, f'{videos_folder}_all_images')
             shutil.rmtree(all_images)
+            
             if isLog:
-                print('Remove {} folder'.format(os.path.basename(all_images)))
+                print(f'Remove {os.path.basename(all_images)} folder')
+        except:
+            pass
         
-        # Save labels name
-        labels_name = os.path.join(ROOT, 'labels.name')
-        with open(labels_name, 'w') as f:
-            for name in class_mapping.values():
-                f.write(name + '\n')
+        try:
+            # Remove check_images and all_voc_labels folder (they are empty folders)
+            check_images_path = os.path.join(ROOT, f'{videos_folder}_check_images')
+            shutil.rmtree(check_images_path)
+            
+            if isLog:
+                print(f'Remove {os.path.basename(check_images_path)} folder')
+        except:
+            pass
+        
+        try:
+            # Remove old .txt files (using yolo to auto labeling)
+            yolo_labels_path = os.path.join(ROOT, f'{videos_folder}_all_yolo_labels')
+            shutil.rmtree(yolo_labels_path)
+            
+            if isLog:
+                print(f'Remove {os.path.basename(yolo_labels_path)}')
+        except:
+            pass
+        
+        try:
+            # Remove voc files (yolo to voc)
+            voc_labels_path = os.path.join(ROOT, f'{videos_folder}_all_voc_labels')
+            shutil.rmtree(voc_labels_path)
+            
+            if isLog:
+                print(f'Remove {os.path.basename(voc_labels_path)}')
+        except:
+            pass
+        
+#         # Save labels name
+#         labels_name = os.path.join(ROOT, 'labels.name')
+#         with open(labels_name, 'w') as f:
+#             for name in class_mapping.values():
+#                 f.write(name + '\n')
     
     # Case: UpdateTransformCreate
     if case == 2:
@@ -1077,4 +948,3 @@ if __name__ == '__main__':
         StartUpdateLabels(ROOT, videos_folder)
         StartVoc2Yolo(ROOT, videos_folder)
         StartCreateNullTxt(ROOT, videos_folder)
-
